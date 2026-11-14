@@ -69,6 +69,8 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
 .tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}
 .tabs button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:12px;padding:12px 6px;font-size:16px;font-weight:600}
 .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.idk{display:block;width:100%;margin:4px 0 10px;padding:13px;border:2px dashed #a8a29e;border-radius:12px;background:#f5f5f4;color:#57534e;font:inherit;font-size:16px;font-weight:600;font-style:italic}
+.idk:disabled{opacity:.55}.idk.picked{border-style:solid;border-color:var(--bad);background:var(--badbg);color:var(--bad);opacity:1}
 </style>
 </head>
 <body>
@@ -148,6 +150,7 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
     <div id="figBox"></div>
     <div class="qtext" id="qText"></div>
     <div id="opts"></div>
+    <button type="button" class="idk" id="idkBtn">I don't know</button>
     <div id="fb" class="fb hidden"></div>
     <div class="rec" id="qRec"></div>
     <button class="btn hidden" id="nextBtn">Next</button>
@@ -198,10 +201,10 @@ const RET=[{"v": "b382ce4b", "ids": ["0-11", "0-12", "0-13", "0-14", "0-15", "0-
 function blank(){return {v:1,rec:{},sel:-1,shuffle:false,session:null,updated:0}}
 function load(){try{const j=JSON.parse(localStorage.getItem(KEY));if(j&&j.v===1&&j.rec)return Object.assign(blank(),j)}catch(e){}return blank()}
 function save(){st.updated=Date.now();try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){toast("Could not save progress on this browser")}}
-function stats(ids){let a=0,c=0,m=0;ids.forEach(id=>{const r=st.rec[id];if(r){a++;r.last?c++:m++}});return {t:ids.length,a,c,m,p:a?Math.round(c/a*100):0}}
+function stats(ids){let a=0,c=0,m=0,k=0;ids.forEach(id=>{const r=st.rec[id];if(r){a++;r.last?c++:m++;if(!r.last&&r.a===-1)k++}});return {t:ids.length,a,c,m,k,p:a?Math.round(c/a*100):0}}
 const idsOf=si=>si<0?ALL:ALL.filter(id=>id.startsWith(si+"-"));
 function bar(el,s){el.innerHTML=`<i class="g" style="width:${s.c/s.t*100}%"></i><i class="r" style="width:${s.m/s.t*100}%"></i>`}
-function statLine(s){return `${s.a}/${s.t} answered · ${s.c} correct · ${s.m} incorrect · ${s.p}%`}
+function statLine(s){return `${s.a}/${s.t} answered · ${s.c} correct · ${s.m} incorrect${s.k?` (${s.k} don't know)`:""} · ${s.p}%`}
 function show(sec){["home","more","quiz","results"].forEach(x=>$(x).classList.toggle("hidden",x!==sec));const top=sec==="home"||sec==="more";$("tabs").classList.toggle("hidden",!top);
   $("homeBtn").classList.toggle("hidden",top);if(top){$("tabExam").classList.toggle("on",sec==="home");$("tabMore").classList.toggle("on",sec==="more");$("tabExam").setAttribute("aria-selected",sec==="home");$("tabMore").setAttribute("aria-selected",sec==="more")}window.scrollTo(0,0)}
 function page(){return st.page==="more"?"more":"home"}
@@ -248,7 +251,7 @@ function startExam(){
   if(!ids.length){toast("You've answered every question here");renderHome();return}
   startSession(ids,selName(),"exam");
 }
-function liveLine(){const ss=st.session;if(!ss)return;const s=ss.sel===undefined?-1:ss.sel;const x=stats(idsOf(s));$("qLive").textContent=`${s<0?"All subjects":DATA[s].s}: ${x.a}/${x.t} answered · ${x.c} correct · ${x.m} incorrect`}
+function liveLine(){const ss=st.session;if(!ss)return;const s=ss.sel===undefined?-1:ss.sel;const x=stats(idsOf(s));$("qLive").textContent=`${s<0?"All subjects":DATA[s].s}: ${x.a}/${x.t} answered · ${x.c} correct · ${x.m} incorrect${x.k?` (${x.k} don't know)`:""}`}
 const selName=()=>st.sel<0?"All subjects":DATA[st.sel].s;
 function renderQ(){
   const ss=st.session;if(!ss)return show(page());
@@ -267,19 +270,21 @@ function renderQ(){
   const lab=!!d[5]&&d[1].every(o=>/^\(?[A-J0-9]{1,3}\)?$/.test(String(o).trim()));
   d[1].forEach((o,k)=>{const b=document.createElement("button");b.className="opt";b.innerHTML=lab?`<span></span>`:`<span class="l">${L[k]}</span><span></span>`;b.lastChild.textContent=o;b.onclick=()=>answer(k);box.appendChild(b)});
   $("fb").classList.add("hidden");$("nextBtn").classList.add("hidden");
+  const ik=$("idkBtn");ik.disabled=false;ik.classList.remove("picked");ik.onclick=()=>answer(-1);
   renderRec(id);
   if(ss.answered!==null&&ss.answered!==undefined&&ss.res[id]!==undefined)paint(ss.answered,d);
 }
-function renderRec(id){const r=st.rec[id];$("qRec").textContent=r?`Your record: last time ${r.last?"right ✓":"wrong ✗"} · ${r.r} right, ${r.w} wrong`:"Your record: not answered yet";}
+function renderRec(id){const r=st.rec[id];$("qRec").textContent=r?`Your record: last time ${r.last?"right ✓":r.a===-1?"I don't know":"wrong ✗"} · ${r.r} right, ${r.w} wrong`:"Your record: not answered yet";}
 function paint(k,d){
   const btns=$("opts").children;for(let j=0;j<btns.length;j++){btns[j].disabled=true;if(j===d[2])btns[j].classList.add("ok");else if(j===k)btns[j].classList.add("bad")}
+  const ik=$("idkBtn");ik.disabled=true;ik.classList.toggle("picked",k===-1);
   const ok=k===d[2],fb=$("fb");fb.className="fb "+(ok?"ok":"bad");
-  fb.innerHTML=`<h3></h3><div></div>`;fb.firstChild.textContent=ok?"Correct!":`Wrong — the answer is ${L[d[2]]}. ${d[1][d[2]]}`;fb.lastChild.textContent=d[3];
+  fb.innerHTML=`<h3></h3><div></div>`;fb.firstChild.textContent=ok?"Correct!":(k===-1?`I don't know — the answer is ${L[d[2]]}. ${d[1][d[2]]}`:`Wrong — the answer is ${L[d[2]]}. ${d[1][d[2]]}`);fb.lastChild.textContent=d[3];
   const nb=$("nextBtn");nb.classList.remove("hidden");nb.textContent=st.session.i+1<st.session.ids.length?"Next":"See results";
 }
 function answer(k){
   const ss=st.session,id=ss.ids[ss.i],{d}=getQ(id);if(ss.res[id]!==undefined)return;
-  const ok=k===d[2];const r=st.rec[id]||{last:0,r:0,w:0};r.last=ok?1:0;r.a=k;ok?r.r++:r.w++;st.rec[id]=r;
+  const ok=k===d[2];const r=st.rec[id]||{last:0,r:0,w:0};r.last=ok?1:0;r.a=k;ok?r.r++:r.w++;if(k===-1)r.dk=(r.dk||0)+1;st.rec[id]=r;
   ss.res[id]=ok;ss.answered=k;save();paint(k,d);renderRec(id);liveLine();
   const vals=Object.values(ss.res);$("qScore").textContent=`${vals.filter(x=>x).length} right · ${vals.filter(x=>!x).length} wrong`;
 }
@@ -328,7 +333,7 @@ function missedEntry(id){
   const {s,d}=getQ(id),r=st.rec[id],opt=k=>(typeof k!=="number"||k<0||k>=d[1].length)?null:{letter:L[k],text:String(d[1][k])};
   const passage=d[6]||"";
   return {id,subject:DATA[s].s,tab:d[4]||"",question:d[0],passage,question_full:passage?passage+"\n\n"+d[0]:d[0],
-    options:d[1].map((o,k)=>({letter:L[k],text:String(o)})),correct:opt(d[2]),your_last_answer:opt(r.a),
+    options:d[1].map((o,k)=>({letter:L[k],text:String(o)})),correct:opt(d[2]),your_last_answer:r.a===-1?{letter:null,text:"I don't know"}:opt(r.a),dont_know:r.a===-1,times_dont_know:r.dk||0,
     times_missed:r.w||0,times_right:r.r||0,explanation:d[3]||"",image_url:d[5]?SITE+d[5]:null};
 }
 function missedText(o){
@@ -340,7 +345,7 @@ function missedText(o){
     if(q.image_url)L2.push("Picture: "+q.image_url);
     q.options.forEach(x=>L2.push(`  ${x.letter}. ${x.text}`));
     L2.push(`Correct answer: ${q.correct.letter}. ${q.correct.text}`);
-    L2.push("Your last answer: "+(q.your_last_answer?`${q.your_last_answer.letter}. ${q.your_last_answer.text}`:"not recorded (answered before this was tracked)"));
+    L2.push("Your last answer: "+(q.dont_know?"I don't know":q.your_last_answer?`${q.your_last_answer.letter}. ${q.your_last_answer.text}`:"not recorded (answered before this was tracked)"));
     L2.push(`Missed ${q.times_missed} time${q.times_missed===1?"":"s"} · right ${q.times_right} time${q.times_right===1?"":"s"}`);
     if(q.explanation)L2.push("Explanation: "+q.explanation);
     L2.push("","----------------------------------------","");
