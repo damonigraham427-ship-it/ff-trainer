@@ -83,9 +83,17 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
   <div class="card">
     <label class="tog">Shuffle questions <input type="checkbox" id="shuffle"></label>
   </div>
-  <div class="modes" style="margin-bottom:14px">
-    <button class="btn" id="startBtn">Start quiz</button>
-    <button class="btn sec" id="missBtn">Review missed</button>
+  <div class="card" id="examCard">
+    <b id="exTitle">Main exam</b>
+    <div class="stats" id="exStats"></div>
+    <button class="btn" id="startBtn">Start exam</button>
+    <div id="allDone" class="small hidden" style="margin-top:10px"></div>
+    <button class="btn sec danger hidden" id="restartBtn">Restart subject</button>
+    <div class="modes" style="margin-top:10px">
+      <button class="btn sec" id="revCBtn">Review correct</button>
+      <button class="btn sec" id="missBtn">Review incorrect</button>
+    </div>
+    <div class="small" style="margin-top:8px">The exam only serves questions you haven't answered yet. Reviews update your record but never put questions back into the exam.</div>
   </div>
   <div class="card" id="mxCard">
     <b>Missed questions</b>
@@ -115,6 +123,7 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
   <div class="card">
     <div class="qmeta"><span id="qPos"></span><span id="qScore"></span></div>
     <div class="qmeta"><span id="qSubj"></span></div>
+    <div class="qmeta"><span id="qLive"></span></div>
     <div id="figBox"></div>
     <div class="qtext" id="qText"></div>
     <div id="opts"></div>
@@ -171,7 +180,7 @@ function save(){st.updated=Date.now();try{localStorage.setItem(KEY,JSON.stringif
 function stats(ids){let a=0,c=0,m=0;ids.forEach(id=>{const r=st.rec[id];if(r){a++;r.last?c++:m++}});return {t:ids.length,a,c,m,p:a?Math.round(c/a*100):0}}
 const idsOf=si=>si<0?ALL:ALL.filter(id=>id.startsWith(si+"-"));
 function bar(el,s){el.innerHTML=`<i class="g" style="width:${s.c/s.t*100}%"></i><i class="r" style="width:${s.m/s.t*100}%"></i>`}
-function statLine(s){return `${s.a}/${s.t} answered · ${s.c} correct · ${s.m} missed · ${s.p}%`}
+function statLine(s){return `${s.a}/${s.t} answered · ${s.c} correct · ${s.m} incorrect · ${s.p}%`}
 function show(sec){["home","quiz","results"].forEach(x=>$(x).classList.toggle("hidden",x!==sec));$("homeBtn").classList.toggle("hidden",sec==="home");window.scrollTo(0,0)}
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");clearTimeout(toast.h);toast.h=setTimeout(()=>e.classList.remove("show"),2200)}
 
@@ -184,24 +193,43 @@ function renderHome(){
     b.onclick=()=>{st.sel=si;save();renderHome()};box.appendChild(b)};
   mk(-1,`All subjects (${ALL.length})`);DATA.forEach((s,i)=>mk(i,s.s));
   $("shuffle").checked=!!st.shuffle;
-  const miss=idsOf(st.sel).filter(id=>st.rec[id]&&!st.rec[id].last).length;
-  $("missBtn").textContent=`Review missed (${miss})`;$("missBtn").disabled=!miss;
+  const sel=idsOf(st.sel),ss0=st.session,sx=stats(sel),left=sel.filter(id=>!st.rec[id]).length;
+  $("exTitle").textContent="Main exam · "+selName();$("exStats").textContent=statLine(sx);
+  $("startBtn").textContent=left?(sx.a?`Continue exam (${left} left)`:`Start exam (${left})`):"All answered";$("startBtn").disabled=!left;
+  $("allDone").classList.toggle("hidden",!!left);$("restartBtn").classList.toggle("hidden",!!left);
+  if(!left)$("allDone").textContent=`You've answered all ${sx.t} questions in ${selName()}. Use Review correct or Review incorrect, or restart to take them again.`;
+  $("restartBtn").textContent=st.sel<0?"Restart all subjects":"Restart "+selName();
+  const nc=sel.filter(id=>st.rec[id]&&st.rec[id].last).length,miss=sel.filter(id=>st.rec[id]&&!st.rec[id].last).length;
+  $("revCBtn").textContent=`Review correct (${nc})`;$("revCBtn").disabled=!nc;
+  $("missBtn").textContent=`Review incorrect (${miss})`;$("missBtn").disabled=!miss;
   const ss=st.session;$("resume").classList.toggle("hidden",!(ss&&ss.i<ss.ids.length));
-  if(ss)$("resumeInfo").textContent=`${ss.label} · question ${Math.min(ss.i+1,ss.ids.length)} of ${ss.ids.length}`;
+  if(ss)$("resumeInfo").textContent=`${MODEN[ss.mode]||"Exam"} · ${ss.label} · question ${Math.min(ss.i+1,ss.ids.length)} of ${ss.ids.length}`;
   renderMx();
   $("storeInfo").textContent=st.updated?("Last saved "+new Date(st.updated).toLocaleString()):"No answers saved yet.";
 }
 function shuf(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function startSession(ids,label,mode){
   if(!ids.length){toast("No questions to show");return}
-  st.session={ids:st.shuffle?shuf(ids):ids.slice(),i:0,res:{},label,mode,answered:null};save();renderQ();show("quiz");
+  st.session={ids:st.shuffle?shuf(ids):ids.slice(),i:0,res:{},label,mode,sel:st.sel,answered:null};save();renderQ();show("quiz");
 }
+const isExam=ss=>ss.mode==="all"||ss.mode==="exam";
+const MODEN={exam:"Exam",all:"Exam",correct:"Review correct",incorrect:"Review incorrect",missed:"Review incorrect"};
+function skipAnswered(){const ss=st.session;if(!ss||!isExam(ss))return;while(ss.i<ss.ids.length&&st.rec[ss.ids[ss.i]]&&ss.res[ss.ids[ss.i]]===undefined)ss.i++}
+function startExam(){
+  const ss=st.session;
+  if(ss&&isExam(ss)&&ss.sel===st.sel&&ss.i<ss.ids.length){skipAnswered();if(ss.i<ss.ids.length){save();renderQ();show("quiz");return}}
+  const ids=idsOf(st.sel).filter(id=>!st.rec[id]);
+  if(!ids.length){toast("You've answered every question here");renderHome();return}
+  startSession(ids,selName(),"exam");
+}
+function liveLine(){const ss=st.session;if(!ss)return;const s=ss.sel===undefined?-1:ss.sel;const x=stats(idsOf(s));$("qLive").textContent=`${s<0?"All subjects":DATA[s].s}: ${x.a}/${x.t} answered · ${x.c} correct · ${x.m} incorrect`}
 const selName=()=>st.sel<0?"All subjects":DATA[st.sel].s;
 function renderQ(){
   const ss=st.session;if(!ss)return show("home");
+  if(ss.answered===null||ss.answered===undefined)skipAnswered();
   if(ss.i>=ss.ids.length)return renderResults();
   const id=ss.ids[ss.i],{s,d}=getQ(id);
-  $("title").textContent=ss.mode==="missed"?"Review missed":"Quiz";
+  $("title").textContent=MODEN[ss.mode]||"Quiz";liveLine();
   $("qPos").textContent=`Question ${ss.i+1} of ${ss.ids.length}`;
   const vals=Object.values(ss.res);$("qScore").textContent=`${vals.filter(x=>x).length} right · ${vals.filter(x=>!x).length} wrong`;
   $("qSubj").textContent=(d[4]&&d[4].startsWith(DATA[s].s))?d[4]:DATA[s].s+(d[4]?" — "+d[4]:"");
@@ -226,16 +254,16 @@ function paint(k,d){
 function answer(k){
   const ss=st.session,id=ss.ids[ss.i],{d}=getQ(id);if(ss.res[id]!==undefined)return;
   const ok=k===d[2];const r=st.rec[id]||{last:0,r:0,w:0};r.last=ok?1:0;r.a=k;ok?r.r++:r.w++;st.rec[id]=r;
-  ss.res[id]=ok;ss.answered=k;save();paint(k,d);renderRec(id);
+  ss.res[id]=ok;ss.answered=k;save();paint(k,d);renderRec(id);liveLine();
   const vals=Object.values(ss.res);$("qScore").textContent=`${vals.filter(x=>x).length} right · ${vals.filter(x=>!x).length} wrong`;
 }
 function next(){const ss=st.session;ss.i++;ss.answered=null;save();renderQ();window.scrollTo(0,0)}
 function renderResults(){
   const ss=st.session;const ids=Object.keys(ss.res);const c=ids.filter(i=>ss.res[i]).length,w=ids.length-c;
-  $("title").textContent="Results";$("rSubj").textContent=ss.label+(ss.mode==="missed"?" · Review missed":"");
+  $("title").textContent="Results";$("rSubj").textContent=ss.label+" · "+(MODEN[ss.mode]||"Exam");
   $("rPct").textContent=ids.length?Math.round(c/ids.length*100)+"%":"—";
   $("rLine").textContent=`${c} right · ${w} wrong · ${ids.length} answered`;
-  const wrong=ids.filter(i=>!ss.res[i]);$("retryBtn").disabled=!wrong.length;$("retryBtn").textContent=`Retry missed (${wrong.length})`;
+  const wrong=ids.filter(i=>!ss.res[i]);$("retryBtn").disabled=!wrong.length;$("retryBtn").textContent=`Retry incorrect (${wrong.length})`;
   const list=$("rList");list.innerHTML=wrong.length?"<b>Missed this session</b>":"<b>No misses this session. Nice work!</b>";
   wrong.forEach(id=>{const {s,d}=getQ(id);const e=document.createElement("div");e.className="missli";e.innerHTML="<div></div><div class='small'></div>";e.firstChild.textContent=d[0];e.lastChild.textContent=`${DATA[s].s} · Answer: ${L[d[2]]}. ${d[1][d[2]]}`;list.appendChild(e)});
   ss.done=wrong;show("results");
@@ -246,12 +274,14 @@ function ask(title,text,yes,fn){$("cTitle").textContent=title;$("cText").textCon
 $("zoomX").onclick=()=>{$("zoom").classList.add("hidden")};
 $("cNo").onclick=()=>$("confirm").classList.add("hidden");
 $("shuffle").onchange=e=>{st.shuffle=e.target.checked;save()};
-$("startBtn").onclick=()=>startSession(idsOf(st.sel),selName(),"all");
-$("missBtn").onclick=()=>startSession(idsOf(st.sel).filter(id=>st.rec[id]&&!st.rec[id].last),selName(),"missed");
-$("resumeBtn").onclick=()=>{renderQ();show("quiz")};
+$("startBtn").onclick=startExam;
+$("missBtn").onclick=()=>startSession(idsOf(st.sel).filter(id=>st.rec[id]&&!st.rec[id].last),selName(),"incorrect");
+$("revCBtn").onclick=()=>startSession(idsOf(st.sel).filter(id=>st.rec[id]&&st.rec[id].last),selName(),"correct");
+$("restartBtn").onclick=()=>ask(st.sel<0?"Restart all subjects?":"Restart "+selName()+"?",`This clears your saved answers for ${selName()} so every question comes back into the exam. Export progress first if you want a backup.`,"Restart",()=>{idsOf(st.sel).forEach(id=>delete st.rec[id]);if(st.session&&st.session.sel===st.sel)st.session=null;save();renderHome();toast("Restarted "+selName())});
+$("resumeBtn").onclick=()=>{skipAnswered();save();renderQ();show("quiz")};
 $("nextBtn").onclick=next;$("endBtn").onclick=endSession;
 $("homeBtn").onclick=goHome;$("rHome").onclick=goHome;
-$("retryBtn").onclick=()=>{const ss=st.session;startSession(ss.done||[],ss.label,"missed")};
+$("retryBtn").onclick=()=>{const ss=st.session,sel=ss.sel;startSession(ss.done||[],ss.label,"incorrect");if(sel!==undefined){st.session.sel=sel;save()}};
 $("resetBtn").onclick=()=>ask("Reset progress?","This erases every saved answer on this device. Export first if you want a backup.","Reset",()=>{const keep={shuffle:st.shuffle,sel:st.sel};st=Object.assign(blank(),keep);save();renderHome();toast("Progress reset")});
 $("exportBtn").onclick=()=>{
   const blob=new Blob([JSON.stringify({app:"ff-exam-trainer",exported:new Date().toISOString(),data:st},null,1)],{type:"application/json"});
