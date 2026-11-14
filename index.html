@@ -66,11 +66,18 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .seg button{border:0;background:#fff;padding:11px;font-size:15px;color:var(--ink)}
 .seg button.on{background:var(--ink);color:#fff;font-weight:600}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}
+.tabs button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:12px;padding:12px 6px;font-size:16px;font-weight:600}
+.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 </style>
 </head>
 <body>
 <header><h1 id="title">Fire Fighter Exam Trainer</h1><button id="homeBtn" class="hidden">Home</button></header>
 <main>
+<nav id="tabs" class="tabs" role="tablist" aria-label="Pages">
+  <button type="button" role="tab" id="tabExam" class="on" aria-selected="true">Main exam</button>
+  <button type="button" role="tab" id="tabMore" aria-selected="false">Review &amp; tools</button>
+</nav>
 <section id="home">
   <div class="card">
     <div class="row"><div style="flex:1"><b id="ovTitle">Overall</b><div class="stats" id="ovStats"></div></div></div>
@@ -80,20 +87,31 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
     <b>Unfinished session</b><div class="stats" id="resumeInfo"></div>
     <button class="btn" id="resumeBtn">Resume</button>
   </div>
-  <div class="card">
-    <label class="tog">Shuffle questions <input type="checkbox" id="shuffle"></label>
-  </div>
   <div class="card" id="examCard">
     <b id="exTitle">Main exam</b>
     <div class="stats" id="exStats"></div>
     <button class="btn" id="startBtn">Start exam</button>
     <div id="allDone" class="small hidden" style="margin-top:10px"></div>
-    <button class="btn sec danger hidden" id="restartBtn">Restart subject</button>
-    <div class="modes" style="margin-top:10px">
+    <button class="btn sec hidden" id="goMoreBtn">Go to Review &amp; tools</button>
+    <div class="small" style="margin-top:8px">The exam only serves questions you haven't answered yet, and picks up where you left off.</div>
+  </div>
+  <div class="small" style="margin:0 2px 8px">Choose a subject:</div>
+  <div id="subjects"></div>
+</section>
+
+<section id="more" class="hidden">
+  <div class="card">
+    <label class="small" for="moreSubj">Subject</label>
+    <select id="moreSubj" class="sel"></select>
+    <div class="stats" id="moreStats"></div>
+  </div>
+  <div class="card">
+    <b>Review</b>
+    <div class="small" style="margin:4px 0 10px">Practice questions you've already answered, sorted by your last answer. Reviews update your record but never put questions back into the main exam.</div>
+    <div class="modes">
       <button class="btn sec" id="revCBtn">Review correct</button>
       <button class="btn sec" id="missBtn">Review incorrect</button>
     </div>
-    <div class="small" style="margin-top:8px">The exam only serves questions you haven't answered yet. Reviews update your record but never put questions back into the exam.</div>
   </div>
   <div class="card" id="mxCard">
     <b>Missed questions</b>
@@ -104,8 +122,10 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
     <button class="btn" id="mxBtn">Export missed</button>
     <div class="small" id="mxInfo" style="margin-top:8px"></div>
   </div>
-  <div class="small" style="margin:0 2px 8px">Choose a subject:</div>
-  <div id="subjects"></div>
+  <div class="card">
+    <b>Settings</b>
+    <label class="tog" style="margin-top:10px">Shuffle questions <input type="checkbox" id="shuffle"></label>
+  </div>
   <div class="card">
     <b>Your progress</b>
     <div class="small" style="margin:4px 0 10px">Progress saves on this device after every answer. Use Export to back it up or move it to another phone, then Import it there.</div>
@@ -113,6 +133,7 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
       <button class="btn sec" id="exportBtn">Export progress</button>
       <button class="btn sec" id="importBtn">Import progress</button>
     </div>
+    <button class="btn sec danger" id="restartBtn">Restart subject</button>
     <button class="btn sec danger" id="resetBtn">Reset progress</button>
     <input type="file" id="importFile" accept="application/json,.json" class="hidden">
     <div class="small" id="storeInfo" style="margin-top:10px"></div>
@@ -181,7 +202,10 @@ function stats(ids){let a=0,c=0,m=0;ids.forEach(id=>{const r=st.rec[id];if(r){a+
 const idsOf=si=>si<0?ALL:ALL.filter(id=>id.startsWith(si+"-"));
 function bar(el,s){el.innerHTML=`<i class="g" style="width:${s.c/s.t*100}%"></i><i class="r" style="width:${s.m/s.t*100}%"></i>`}
 function statLine(s){return `${s.a}/${s.t} answered · ${s.c} correct · ${s.m} incorrect · ${s.p}%`}
-function show(sec){["home","quiz","results"].forEach(x=>$(x).classList.toggle("hidden",x!==sec));$("homeBtn").classList.toggle("hidden",sec==="home");window.scrollTo(0,0)}
+function show(sec){["home","more","quiz","results"].forEach(x=>$(x).classList.toggle("hidden",x!==sec));const top=sec==="home"||sec==="more";$("tabs").classList.toggle("hidden",!top);
+  $("homeBtn").classList.toggle("hidden",top);if(top){$("tabExam").classList.toggle("on",sec==="home");$("tabMore").classList.toggle("on",sec==="more");$("tabExam").setAttribute("aria-selected",sec==="home");$("tabMore").setAttribute("aria-selected",sec==="more")}window.scrollTo(0,0)}
+function page(){return st.page==="more"?"more":"home"}
+function setPage(pg){st.page=pg;save();renderHome();show(pg)}
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");clearTimeout(toast.h);toast.h=setTimeout(()=>e.classList.remove("show"),2200)}
 
 function renderHome(){
@@ -196,8 +220,10 @@ function renderHome(){
   const sel=idsOf(st.sel),ss0=st.session,sx=stats(sel),left=sel.filter(id=>!st.rec[id]).length;
   $("exTitle").textContent="Main exam · "+selName();$("exStats").textContent=statLine(sx);
   $("startBtn").textContent=left?(sx.a?`Continue exam (${left} left)`:`Start exam (${left})`):"All answered";$("startBtn").disabled=!left;
-  $("allDone").classList.toggle("hidden",!!left);$("restartBtn").classList.toggle("hidden",!!left);
-  if(!left)$("allDone").textContent=`You've answered all ${sx.t} questions in ${selName()}. Use Review correct or Review incorrect, or restart to take them again.`;
+  $("allDone").classList.toggle("hidden",!!left);$("goMoreBtn").classList.toggle("hidden",!!left);
+  if(!left)$("allDone").textContent=`You've answered all ${sx.t} questions in ${selName()}. Go to Review & tools to review correct or incorrect answers, or restart the subject.`;
+  const ms=$("moreSubj");ms.innerHTML="";const ao=(v,n)=>{const o=document.createElement("option");o.value=v;o.textContent=n;ms.appendChild(o)};ao(-1,"All subjects");DATA.forEach((s,i)=>ao(i,s.s));ms.value=String(st.sel);
+  $("moreStats").textContent=statLine(sx);$("restartBtn").disabled=!sx.a;
   $("restartBtn").textContent=st.sel<0?"Restart all subjects":"Restart "+selName();
   const nc=sel.filter(id=>st.rec[id]&&st.rec[id].last).length,miss=sel.filter(id=>st.rec[id]&&!st.rec[id].last).length;
   $("revCBtn").textContent=`Review correct (${nc})`;$("revCBtn").disabled=!nc;
@@ -225,7 +251,7 @@ function startExam(){
 function liveLine(){const ss=st.session;if(!ss)return;const s=ss.sel===undefined?-1:ss.sel;const x=stats(idsOf(s));$("qLive").textContent=`${s<0?"All subjects":DATA[s].s}: ${x.a}/${x.t} answered · ${x.c} correct · ${x.m} incorrect`}
 const selName=()=>st.sel<0?"All subjects":DATA[st.sel].s;
 function renderQ(){
-  const ss=st.session;if(!ss)return show("home");
+  const ss=st.session;if(!ss)return show(page());
   if(ss.answered===null||ss.answered===undefined)skipAnswered();
   if(ss.i>=ss.ids.length)return renderResults();
   const id=ss.ids[ss.i],{s,d}=getQ(id);
@@ -269,12 +295,14 @@ function renderResults(){
   ss.done=wrong;show("results");
 }
 function endSession(){const ss=st.session;if(ss&&Object.keys(ss.res).length){ss.i=ss.ids.length;save();renderResults()}else{st.session=null;save();goHome()}}
-function goHome(){if(st.session&&st.session.i>=st.session.ids.length)st.session=null;save();$("title").textContent="Fire Fighter Exam Trainer";renderHome();show("home")}
+function goHome(){if(st.session&&st.session.i>=st.session.ids.length)st.session=null;save();$("title").textContent="Fire Fighter Exam Trainer";renderHome();show(page())}
 function ask(title,text,yes,fn){$("cTitle").textContent=title;$("cText").textContent=text;$("cYes").textContent=yes;$("confirm").classList.remove("hidden");$("cYes").onclick=()=>{$("confirm").classList.add("hidden");fn()};}
 $("zoomX").onclick=()=>{$("zoom").classList.add("hidden")};
 $("cNo").onclick=()=>$("confirm").classList.add("hidden");
 $("shuffle").onchange=e=>{st.shuffle=e.target.checked;save()};
 $("startBtn").onclick=startExam;
+$("tabExam").onclick=()=>setPage("home");$("tabMore").onclick=()=>setPage("more");$("goMoreBtn").onclick=()=>setPage("more");
+$("moreSubj").onchange=e=>{st.sel=Number(e.target.value);save();renderHome()};
 $("missBtn").onclick=()=>startSession(idsOf(st.sel).filter(id=>st.rec[id]&&!st.rec[id].last),selName(),"incorrect");
 $("revCBtn").onclick=()=>startSession(idsOf(st.sel).filter(id=>st.rec[id]&&st.rec[id].last),selName(),"correct");
 $("restartBtn").onclick=()=>ask(st.sel<0?"Restart all subjects?":"Restart "+selName()+"?",`This clears your saved answers for ${selName()} so every question comes back into the exam. Export progress first if you want a backup.`,"Restart",()=>{idsOf(st.sel).forEach(id=>delete st.rec[id]);if(st.session&&st.session.sel===st.sel)st.session=null;save();renderHome();toast("Restarted "+selName())});
@@ -355,7 +383,7 @@ $("mxBtn").onclick=exportMissed;
 window.addEventListener("pagehide",save);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
-renderHome();
+renderHome();show(page());
 if(st.session&&st.session.i<st.session.ids.length&&location.hash==="#resume"){renderQ();show("quiz")}
 window.__ff={get state(){return st}};
 })();
