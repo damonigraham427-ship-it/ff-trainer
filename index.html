@@ -62,6 +62,10 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
 .modal .card{max-width:420px;width:100%}
 .missli{border-top:1px solid var(--line);padding:10px 0;font-size:15px}
+.sel{display:block;width:100%;font-size:16px;padding:11px;border:1px solid var(--line);border-radius:10px;background:#fff;margin:4px 0 10px;color:var(--ink)}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:11px;font-size:15px;color:var(--ink)}
+.seg button.on{background:var(--ink);color:#fff;font-weight:600}
 </style>
 </head>
 <body>
@@ -82,6 +86,15 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
   <div class="modes" style="margin-bottom:14px">
     <button class="btn" id="startBtn">Start quiz</button>
     <button class="btn sec" id="missBtn">Review missed</button>
+  </div>
+  <div class="card" id="mxCard">
+    <b>Missed questions</b>
+    <div class="small" style="margin:4px 0 10px">Export the questions you last got wrong, with the correct answers and explanations, to share with FF Study Coach.</div>
+    <label class="small" for="mxSubj">Subject</label>
+    <select id="mxSubj" class="sel"></select>
+    <div class="seg" role="group" aria-label="File format"><button type="button" id="mxJson" class="on">JSON file</button><button type="button" id="mxTxt">Text file</button></div>
+    <button class="btn" id="mxBtn">Export missed</button>
+    <div class="small" id="mxInfo" style="margin-top:8px"></div>
   </div>
   <div class="small" style="margin:0 2px 8px">Choose a subject:</div>
   <div id="subjects"></div>
@@ -175,6 +188,7 @@ function renderHome(){
   $("missBtn").textContent=`Review missed (${miss})`;$("missBtn").disabled=!miss;
   const ss=st.session;$("resume").classList.toggle("hidden",!(ss&&ss.i<ss.ids.length));
   if(ss)$("resumeInfo").textContent=`${ss.label} · question ${Math.min(ss.i+1,ss.ids.length)} of ${ss.ids.length}`;
+  renderMx();
   $("storeInfo").textContent=st.updated?("Last saved "+new Date(st.updated).toLocaleString()):"No answers saved yet.";
 }
 function shuf(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
@@ -211,7 +225,7 @@ function paint(k,d){
 }
 function answer(k){
   const ss=st.session,id=ss.ids[ss.i],{d}=getQ(id);if(ss.res[id]!==undefined)return;
-  const ok=k===d[2];const r=st.rec[id]||{last:0,r:0,w:0};r.last=ok?1:0;ok?r.r++:r.w++;st.rec[id]=r;
+  const ok=k===d[2];const r=st.rec[id]||{last:0,r:0,w:0};r.last=ok?1:0;r.a=k;ok?r.r++:r.w++;st.rec[id]=r;
   ss.res[id]=ok;ss.answered=k;save();paint(k,d);renderRec(id);
   const vals=Object.values(ss.res);$("qScore").textContent=`${vals.filter(x=>x).length} right · ${vals.filter(x=>!x).length} wrong`;
 }
@@ -248,6 +262,66 @@ $("importFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new
   const n=Object.keys(d.rec).filter(k=>ALL.includes(k)).length;
   ask("Import progress?",`Replace the progress on this device with the file's ${n} answered questions?`,"Import",()=>{st=Object.assign(blank(),d);save();renderHome();toast("Progress imported")});
 }catch(x){toast("That file isn't a valid progress export")}e.target.value=""};rd.readAsText(f)};
+const SITE="https://damonigraham427-ship-it.github.io/ff-trainer/";
+let mxFmt="json";
+const missedIds=si=>idsOf(si).filter(id=>st.rec[id]&&!st.rec[id].last);
+function ymd(d){const p=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())}
+function missedEntry(id){
+  const {s,d}=getQ(id),r=st.rec[id],opt=k=>(typeof k!=="number"||k<0||k>=d[1].length)?null:{letter:L[k],text:String(d[1][k])};
+  const passage=d[6]||"";
+  return {id,subject:DATA[s].s,tab:d[4]||"",question:d[0],passage,question_full:passage?passage+"\n\n"+d[0]:d[0],
+    options:d[1].map((o,k)=>({letter:L[k],text:String(o)})),correct:opt(d[2]),your_last_answer:opt(r.a),
+    times_missed:r.w||0,times_right:r.r||0,explanation:d[3]||"",image_url:d[5]?SITE+d[5]:null};
+}
+function missedText(o){
+  const L2=[`FF Trainer: missed questions`,`Exported ${new Date(o.exported).toLocaleString()} · ${o.filter} · ${o.count} question${o.count===1?"":"s"}`,`Site: ${o.site}`,""];
+  o.questions.forEach((q,i)=>{
+    L2.push(`${i+1}. ${q.subject}${q.tab&&q.tab!==q.subject?" — "+q.tab:""} (ID ${q.id})`);
+    if(q.passage)L2.push("Passage:",q.passage,"");
+    L2.push("Question: "+q.question);
+    if(q.image_url)L2.push("Picture: "+q.image_url);
+    q.options.forEach(x=>L2.push(`  ${x.letter}. ${x.text}`));
+    L2.push(`Correct answer: ${q.correct.letter}. ${q.correct.text}`);
+    L2.push("Your last answer: "+(q.your_last_answer?`${q.your_last_answer.letter}. ${q.your_last_answer.text}`:"not recorded (answered before this was tracked)"));
+    L2.push(`Missed ${q.times_missed} time${q.times_missed===1?"":"s"} · right ${q.times_right} time${q.times_right===1?"":"s"}`);
+    if(q.explanation)L2.push("Explanation: "+q.explanation);
+    L2.push("","----------------------------------------","");
+  });
+  return L2.join("\n");
+}
+function buildMissed(si){
+  const ids=missedIds(si),now=new Date();
+  const o={app:"ff-exam-trainer",kind:"missed-questions",format_version:1,exported:now.toISOString(),site:SITE,
+    filter:si<0?"All subjects":DATA[si].s,count:ids.length,questions:ids.map(missedEntry)};
+  const base="ff-missed-"+ymd(now);
+  return mxFmt==="txt"?{name:base+".txt",type:"text/plain",body:missedText(o),o}:{name:base+".json",type:"application/json",body:JSON.stringify(o,null,1),o};
+}
+function dl(name,type,body){const blob=new Blob([body],{type});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
+async function exportMissed(){
+  const si=Number($("mxSubj").value);const f=buildMissed(si);
+  if(!f.o.count){toast("No missed questions to export");return}
+  window.__lastMissedExport=f;
+  const coarse=window.matchMedia&&matchMedia("(pointer:coarse)").matches;
+  try{
+    if(coarse&&navigator.canShare&&typeof File==="function"){
+      const file=new File([f.body],f.name,{type:f.type});
+      if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:"FF Trainer missed questions",text:`${f.o.count} missed question${f.o.count===1?"":"s"} (${f.o.filter})`});toast("Shared");return}
+    }
+  }catch(e){if(e&&e.name==="AbortError")return}
+  dl(f.name,f.type,f.body);toast(`Downloaded ${f.name}`);
+}
+function renderMx(){
+  const sel=$("mxSubj"),keep=sel.value===""?"-1":sel.value;sel.innerHTML="";
+  const add=(v,n)=>{const o=document.createElement("option");o.value=v;o.textContent=`${n} (${missedIds(v).length} missed)`;sel.appendChild(o)};
+  add(-1,"All subjects");DATA.forEach((s,i)=>add(i,s.s));
+  sel.value=[...sel.options].some(o=>o.value===keep)?keep:"-1";
+  const n=missedIds(Number(sel.value)).length;$("mxBtn").textContent=`Export missed (${n})`;$("mxBtn").disabled=!n;
+  $("mxInfo").textContent=`File: ff-missed-${ymd(new Date())}.${mxFmt}`;
+}
+$("mxSubj").onchange=renderMx;
+$("mxJson").onclick=()=>{mxFmt="json";$("mxJson").classList.add("on");$("mxTxt").classList.remove("on");renderMx()};
+$("mxTxt").onclick=()=>{mxFmt="txt";$("mxTxt").classList.add("on");$("mxJson").classList.remove("on");renderMx()};
+$("mxBtn").onclick=exportMissed;
 window.addEventListener("pagehide",save);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
