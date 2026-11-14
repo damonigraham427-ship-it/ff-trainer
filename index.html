@@ -196,7 +196,7 @@ function renderQ(){
   if(d[6]){const pd=document.createElement("div");pd.className="passage";pd.textContent=d[6];fb0.appendChild(pd)}
   $("qText").textContent=d[0];
   const box=$("opts");box.innerHTML="";
-  const lab=d[1].every(o=>/^\(?[A-J0-9]{1,3}\)?$/.test(String(o).trim()));
+  const lab=!!d[5]&&d[1].every(o=>/^\(?[A-J0-9]{1,3}\)?$/.test(String(o).trim()));
   d[1].forEach((o,k)=>{const b=document.createElement("button");b.className="opt";b.innerHTML=lab?`<span></span>`:`<span class="l">${L[k]}</span><span></span>`;b.lastChild.textContent=o;b.onclick=()=>answer(k);box.appendChild(b)});
   $("fb").classList.add("hidden");$("nextBtn").classList.add("hidden");
   renderRec(id);
