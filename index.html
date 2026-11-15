@@ -123,6 +123,8 @@ label.tog input{width:22px;height:22px;accent-color:var(--red)}
     <div class="seg" role="group" aria-label="File format"><button type="button" id="mxJson" class="on">JSON file</button><button type="button" id="mxTxt">Text file</button></div>
     <button class="btn" id="mxBtn">Export missed</button>
     <div class="small" id="mxInfo" style="margin-top:8px"></div>
+    <button class="btn sec" id="coachBtn">Send to Coach</button>
+    <div class="small" style="margin-top:8px">Uploads the JSON export straight to your private coach inbox on GitHub. <a href="#" id="coachReset">Reset coach key</a></div>
   </div>
   <div class="card">
     <b>Settings</b>
@@ -379,12 +381,47 @@ function renderMx(){
   add(-1,"All subjects");DATA.forEach((s,i)=>add(i,s.s));
   sel.value=[...sel.options].some(o=>o.value===keep)?keep:"-1";
   const n=missedIds(Number(sel.value)).length;$("mxBtn").textContent=`Export missed (${n})`;$("mxBtn").disabled=!n;
+  const cb=$("coachBtn");if(cb&&!coachBusy){cb.textContent=`Send to Coach (${n})`;cb.disabled=!n}
   $("mxInfo").textContent=`File: ff-missed-${ymd(new Date())}.${mxFmt}`;
 }
 $("mxSubj").onchange=renderMx;
 $("mxJson").onclick=()=>{mxFmt="json";$("mxJson").classList.add("on");$("mxTxt").classList.remove("on");renderMx()};
 $("mxTxt").onclick=()=>{mxFmt="txt";$("mxTxt").classList.add("on");$("mxJson").classList.remove("on");renderMx()};
 $("mxBtn").onclick=exportMissed;
+const COACH_OWNER="damonigraham427-ship-it",COACH_REPO="ff-coach-inbox",COACH_KEY="ffTrainer.coachToken";
+const coachTok=()=>{try{return localStorage.getItem(COACH_KEY)||""}catch(e){return ""}};
+function coachAskTok(){const t=(prompt("Paste your GitHub token for the coach inbox (saved only on this device):")||"").trim();if(t){try{localStorage.setItem(COACH_KEY,t)}catch(e){}}return t}
+function b64utf8(str){const b=new TextEncoder().encode(str);let s="";for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s)}
+async function coachPut(path,content,tok){
+  const url=`https://api.github.com/repos/${COACH_OWNER}/${COACH_REPO}/contents/${path}`;
+  const h={"Authorization":"Bearer "+tok,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
+  let sha;const g=await fetch(url+"?t="+Date.now(),{headers:h,cache:"no-store"});
+  if(g.ok){sha=(await g.json()).sha}else if(g.status!==404){const e=new Error("HTTP "+g.status);e.status=g.status;throw e}
+  const body={message:"FF Trainer export",content};if(sha)body.sha=sha;
+  const r=await fetch(url,{method:"PUT",headers:Object.assign({"Content-Type":"application/json"},h),body:JSON.stringify(body)});
+  if(!r.ok){const e=new Error("HTTP "+r.status);e.status=r.status;throw e}
+}
+var coachBusy=false;
+async function sendToCoach(){
+  if(coachBusy)return;
+  const si=Number($("mxSubj").value);const f=buildMissed(si);
+  if(!f.o.count){toast("No missed questions to send");return}
+  let tok=coachTok()||coachAskTok();if(!tok){toast("Coach key needed to send");return}
+  const d=new Date(f.o.exported),p=n=>String(n).padStart(2,"0");
+  const stamp=ymd(d)+"-"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+  const content=b64utf8(JSON.stringify(f.o,null,1));
+  const b=$("coachBtn"),lbl=b.textContent;coachBusy=true;b.disabled=true;b.textContent="Sending…";
+  try{
+    await coachPut(`exports/missed-${stamp}.json`,content,tok);
+    await coachPut("exports/latest.json",content,tok);
+    toast(`Sent ${f.o.count} to Coach`);
+  }catch(e){
+    if(e&&(e.status===401||e.status===403||e.status===404)){try{localStorage.removeItem(COACH_KEY)}catch(x){}toast("Coach key rejected. Tap Send to Coach to enter a new one")}
+    else toast("Send failed. Check your connection and try again");
+  }finally{coachBusy=false;b.textContent=lbl;renderMx()}
+}
+$("coachBtn").onclick=sendToCoach;
+$("coachReset").onclick=e=>{e.preventDefault();try{localStorage.removeItem(COACH_KEY)}catch(x){}const t=coachAskTok();toast(t?"Coach key saved":"Coach key cleared")};
 window.addEventListener("pagehide",save);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
