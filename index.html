@@ -422,6 +422,9 @@ async function sendToCoach(){
 }
 $("coachBtn").onclick=sendToCoach;
 $("coachReset").onclick=e=>{e.preventDefault();try{localStorage.removeItem(COACH_KEY)}catch(x){}const t=coachAskTok();toast(t?"Coach key saved":"Coach key cleared")};
+(()=>{const m=/(?:^#|&)coachkey=([^&]+)/.exec(location.hash||"");if(!m)return;let t="";try{t=decodeURIComponent(m[1]).trim()}catch(e){}
+  try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
+  if(t){try{localStorage.setItem(COACH_KEY,t);toast("Coach key saved")}catch(e){toast("Could not save coach key")}}})();
 window.addEventListener("pagehide",save);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
